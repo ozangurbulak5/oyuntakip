@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oyun Kütüphanesi</title>
+    <!-- Chart.js CDN for graphics (Grafik kaldırıldığı için artık kullanılmayacak, ancak Chart.js kütüphanesini şimdilik tutalım) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to mimic the dark, dramatic background and glow */
+        .dramatic-bg {
+            background-color: #0d0000; /* Very dark red/black */
+            background-image: 
+                radial-gradient(circle at 50% 10%, rgba(139, 0, 0, 0.4) 0%, transparent 70%), /* Kırmızı Ay Parıltısı */
+                url('https://images7.alphacoders.com/134/thumb-1920-1341150.png'); /* Arka plan görseli */
+            background-size: cover; /* Tüm arka planı kapla */
+            background-position: center center; /* Görseli ortala */
+            background-repeat: no-repeat;
+            background-attachment: fixed; /* Arka planın kaymasını engeller, sabit kalır */
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            overflow-y: auto;
+        }
+
+        .neon-border {
+            border: 1px solid;
+            border-image: linear-gradient(to right, #6a11cb, #2575fc) 1;
+            box-shadow: 0 0 15px rgba(106, 17, 203, 0.7);
+        }
+
+        .neon-button {
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px #ff0000;
+        }
+
+        .neon-button:hover {
+            box-shadow: 0 0 15px #ff0000, 0 0 25px rgba(255, 0, 0, 0.5);
+            transform: translateY(-2px);
+            background-color: rgba(255, 0, 0, 0.1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #8b0000;
+            border-radius: 4px;
+        }
+        
+        /* Dashboard Panel Styles (Slide-out from left) */
+        .slide-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            transform: translateX(-100%);
+            transition: transform 0.4s ease-in-out;
+            z-index: 55; 
+            background-color: #0d0000; /* Dark background to match theme */
+            overflow-y: auto;
+            padding: 1.5rem;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .slide-panel.open {
+            transform: translateX(0);
+        }
+
+        /* Dashboard Panel - Geniş */
+        #dashboardPanel {
+            width: min(95vw, 1200px); 
+        }
+
+        /* Add Game Panel - Dar */
+        #addGamePanel, #recommendationPanel { /* İKİ PANEL DE DAR VE AYNI STİLDE */
+            width: min(90vw, 550px); 
+            border-right: 2px solid #ff0000;
+            background-color: #1a0000; /* Daha koyu kırmızımsı arka plan */
+        }
+
+        /* Akıcı açılır/kapanır (Accordion) animasyon için CSS */
+        #gameListContent {
+            max-height: 1000px; /* Açık durumdayken yeterince büyük bir değer */
+            overflow: hidden;
+            transition: max-height 0.4s ease-in-out; 
+        }
+        
+        /* KAPALI DURUM */
+        #gameListContent.closed {
+            max-height: 0;
+            padding: 0; 
+            margin: 0; 
+        }
+    </style>
+</head>
+<body class="dramatic-bg text-gray-100">
+
+    <!-- GİRİŞ EKRANI (Varsayılan olarak görünür) -->
+    <div id="loginOverlay" class="dramatic-bg fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div class="bg-gray-900/80 backdrop-blur-md p-8 rounded-2xl w-full max-w-sm neon-border border-purple-500/50">
+            <h2 class="text-3xl font-bold text-center text-red-500 mb-6" style="text-shadow: 0 0 8px #ff0000;">
+                Giriş Yap
+            </h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="passwordInput" class="block text-sm font-medium text-gray-300 mb-1">Şifre</label>
+                    <input type="password" id="passwordInput" class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500" placeholder="••••••••">
+                    <p class="text-xs text-gray-400 mt-1">Demo şifresi: <span class="font-bold text-yellow-400">1234</span></p>
+                </div>
+                <button id="loginButton" class="w-full neon-button px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition font-semibold">
+                    Giriş Yap
+                </button>
+                <p id="loginError" class="text-red-400 text-sm text-center h-4"></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ANA UYGULAMA KAPSAYICISI (Varsayılan olarak gizli) -->
+    <div id="mainAppContainer" class="hidden">
+
+        <!-- Header -->
+        <header class="p-4 flex justify-center items-center relative z-10">
+            <h1 class="text-3xl font-bold tracking-widest uppercase text-red-500" style="text-shadow: 0 0 8px #ff0000;">
+                Oyun Kütüphanesi
+            </h1>
+            <button onclick="openExitModal()" class="absolute top-4 right-4 bg-red-800 text-white px-3 py-1 rounded-full text-sm hover:bg-red-700 transition">
+                Çıkış
+            </button>
+        </header>
+
+        <!-- ANA İÇERİK KAPSAYICISI -->
+        <div class="container mx-auto p-4 flex flex-col items-center space-y-4">
+
+            <!-- EYLEM BUTONLARI -->
+            <div class="flex flex-wrap justify-center gap-4 w-full max-w-7xl">
+                <!-- Dashboard Butonu -->
+                <button onclick="toggleDashboard()" class="neon-button flex items-center bg-gray-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-700 transition">
+                    <!-- Dashboard Icon -->
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    İstatistikler
+                </button>
+
+                <!-- YENİ: AI ÖNERİLERİ BUTONU -->
+                <button onclick="toggleRecommendationPanel()" class="neon-button flex items-center bg-gray-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-700 transition">
+                    <!-- AI Icon -->
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6a2 2 0 012-2h2a2 2 0 012 2v13m-2-6h.01M6 13h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z"></path></svg>
+                    AI Önerileri
+                </button>
+                
+                <!-- Oyun Ekle Butonu -->
+                <button onclick="openAddPanel()" class="neon-button flex items-center bg-gray-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-700 transition">
+                    <!-- Add Icon -->
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Oyun Ekle
+                </button>
+
+                <!-- Listeyi Aç/Kapat Butonu -->
+                <button id="toggleListButton" onclick="toggleGameListContent()" class="neon-button flex items-center bg-gray-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-700 transition">
+                    <!-- Visibility Icon -->
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    Listeyi Gizle
+                </button>
+            </div>
+            
+            <!-- Merkez İçerik Kartı (Filtreler ve Liste) -->
+            <div class="flex-grow">
+                <div id="mainContentCard" class="bg-gray-900/70 backdrop-blur-sm rounded-xl w-full max-w-7xl mx-auto neon-border">
+                    
+                    <!-- BAŞLIK KISMI -->
+                    <div class="p-4 md:p-6 pb-2 border-b border-purple-500/50">
+                         <h2 class="text-xl font-semibold text-white">Oyun Listesi</h2>
+                    </div>
+
+                    <!-- OYUN LİSTESİ İÇERİĞİ KAPSAYICISI: Burası kayarak kapanacak. -->
+                    <div id="gameListContent"> 
+                        <!-- İçerik padding'i buraya eklendi -->
+                        <div class="p-4 md:p-6 pt-4 md:pt-6">
+                            <!-- Filtreler: Grid yapısı -->
+                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+                                <!-- Oyun Adı Input -->
+                                <input type="text" id="gameNameInput" placeholder="Oyun Adı..." class="col-span-1 bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition" onkeyup="filterGames()">
+                                
+                                <!-- Tür Dropdown -->
+                                <select id="genreFilter" class="bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition" onchange="filterGames()">
+                                    <option value="all">Tüm Türler</option>
+                                    <option value="aksiyon">⚔️ Aksiyon</option>
+                                    <option value="macera">🧭 Macera</option>
+                                    <option value="rpg">🧑‍💻 RPG</option>
+                                    <option value="fps">🔫 FPS</option>
+                                    <option value="simulasyon">✈️ Simülasyon</option>
+                                    <option value="strateji">♟️ Strateji</option>
+                                    <option value="yarış">🏎️ Yarış</option>
+                                    <option value="spor">⚽ Spor</option>
+                                    <option value="korku">👻 Korku</option>
+                                    <option value="bulmaca">🧩 Bulmaca</option>
+                                    <option value="platform">🪜 Platform</option>
+                                    <option value="diğer">🎲 Diğer</option>
+                                </select>
+
+                                <!-- Platform Dropdown -->
+                                <select id="platformFilter" class="bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition" onchange="filterGames()">
+                                    <option value="all">Tüm Platformlar</option>
+                                    <option value="bilgisayar">💻 Bilgisayar</option>
+                                    <option value="konsol">🎮 Konsol</option>
+                                </select>
+
+                                <!-- Yeni Aşama Dropdown -->
+                                <select id="statusFilter" class="bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition" onchange="filterGames()">
+                                    <option value="all">Tüm Aşamalar</option>
+                                    <option value="Satın Alınacak">Satın Alınacak</option>
+                                    <option value="Mevcut Oyunlar">Mevcut Oyunlar</option>
+                                    <option value="Bekleme Listesi">Bekleme Listesi</option>
+                                    <option value="Yüklü Oyunlar">Yüklü Oyunlar</option>
+                                    <option value="Aktif Oynanıyor">Aktif Oynanıyor</option>
+                                    <option value="Bitirildi">Bitirildi</option>
+                                </select>
+                            </div>
+
+                            <!-- Oyun Listesi Başlıkları -->
+                            <div class="grid grid-cols-6 lg:grid-cols-7 gap-4 font-bold text-red-400 border-b border-red-500/50 pb-2 mb-2 text-sm uppercase">
+                                <div class="col-span-2">Oyun Adı / Puan</div>
+                                <div class="hidden lg:block">Geliştirici</div> <!-- SÜTUN: Geliştirici -->
+                                <div class="hidden sm:block">Yıl</div>
+                                <div class="hidden sm:block">Platform</div>
+                                <div>Aşama</div>
+                                <div class="col-span-1">Eylemler</div>
+                            </div>
+
+                            <!-- Oyun Listesi İçeriği -->
+                            <!-- MAX-H-96 -> MAX-H-[600PX] YAPILDI -->
+                            <div id="gameList" class="space-y-2 max-h-[600px] custom-scrollbar overflow-y-auto">
+                                <!-- Oyunlar buraya JS ile eklenecektir -->
+                            </div>
+
+                            <!-- Boş Liste Mesajı -->
+                            <div id="emptyMessage" class="mt-4 p-4 bg-red-900/30 text-red-300 text-center rounded-lg border border-red-700/50" style="display: none;">
+                                Kriterlere uygun oyun bulunamadı.
+                            </div>
+                        </div>
+                    </div> <!-- #gameListContent sonu -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. İstatistik Paneli (Dashboard) -->
+    <div id="dashboardPanel" class="slide-panel p-6 shadow-2xl">
+        <div class="flex justify-between items-center mb-6 border-b border-red-500/50 pb-3">
+            <h2 class="text-3xl font-bold text-red-400" style="text-shadow: 0 0 5px #ff0000;">Kütüphane Özeti & Sayısal Veriler</h2>
+            <button onclick="toggleDashboard()" class="text-red-500 hover:text-white transition">
+                <!-- Close Icon (X) -->
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <!-- YENİ: Başlangıç Tarihine Göre Sıralama Dropdown'ı -->
+        <div class="mb-4 flex justify-end">
+            <select id="sortGamesBy" class="bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500 transition" onchange="filterGames()">
+                <option value="score_desc">Puana Göre (Yüksekten)</option>
+                <option value="date_desc">Eklenme Tarihi (Yeniye)</option>
+                <option value="date_asc">Eklenme Tarihi (Eskiden)</option>
+                <option value="year_desc">Çıkış Yılı (Yeniye)</option>
+                <option value="year_asc">Çıkış Yılı (Eskiden)</option>
+            </select>
+        </div>
+
+
+        <!-- İSTATİSTİK KARTLARI (KPIs) -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 mb-8">
+            <!-- Toplam Oyun -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-purple-600/50 text-center col-span-1">
+                <p class="text-lg text-red-300 truncate">Toplam Oyun</p>
+                <p id="kpiTotalGames" class="text-4xl font-extrabold text-white mt-1">0</p>
+            </div>
+            
+            <!-- Bitirilen Oyun -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-purple-600/50 text-center col-span-1">
+                <p class="text-lg text-red-300 truncate">Bitirilen Oyun</p>
+                <p id="kpiFinishedGames" class="text-4xl font-extrabold text-green-400 mt-1">0</p>
+            </div>
+            
+            <!-- Ortalama Puan (Tüm Oyunlar) -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-purple-600/50 text-center col-span-1">
+                <p class="text-lg text-red-300 truncate">Ortalama Puan (Genel)</p>
+                <p id="kpiAverageScore" class="text-4xl font-extrabold text-yellow-400 mt-1">0.00</p>
+            </div>
+            
+            <!-- Ortalama Puan (Bitirilen) -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-purple-600/50 text-center col-span-1">
+                <p class="text-lg text-red-300 truncate">Ortalama Puan (Bitirilen)</p>
+                <p id="kpiAvgFinishedScore" class="text-4xl font-extrabold text-blue-400 mt-1">0.00</p>
+            </div>
+            
+            <!-- En Yüksek Puanlı Yıl -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-purple-600/50 text-center col-span-1">
+                <p class="text-lg text-red-300 truncate">En Yüksek Puanlı Yıl</p>
+                <p id="kpiBestYear" class="text-4xl font-extrabold text-pink-400 mt-1">N/A</p>
+            </div>
+        </div>
+
+        <!-- SAYISAL VERİ LİSTELERİ -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            
+            <!-- Aşama Dağılımı (Sayısal Liste) -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-red-600/50">
+                <h3 class="text-xl font-semibold mb-3 text-white border-b border-gray-700/50 pb-2">Oyun Aşama Dağılımı</h3>
+                <div id="statusDistributionList" class="space-y-3">
+                    <!-- Aşama verileri buraya JS ile eklenecek -->
+                </div>
+            </div>
+
+            <!-- Türlere Göre Oyun Sayısı (Sayısal Liste) -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-red-600/50">
+                <h3 class="text-xl font-semibold mb-3 text-white border-b border-gray-700/50 pb-2">Türlere Göre Oyun Sayısı</h3>
+                <div id="genreDistributionList" class="space-y-3">
+                    <!-- Tür verileri buraya JS ile eklenecek -->
+                </div>
+            </div>
+
+            <!-- YILLARA GÖRE ORTALAMA PUAN LİSTESİ (Yeni Bölüm) -->
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-red-600/50">
+                <h3 class="text-xl font-semibold mb-3 text-white border-b border-gray-700/50 pb-2">Yıllara Göre Ortalama Puan</h3>
+                <div id="yearAverageScoreList" class="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
+                    <!-- Yıllara göre ortalama puan verileri buraya JS ile eklenecek -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- GENİŞ ALAN LİSTESİ (Geliştiriciler Listesi) -->
+        <div class="grid grid-cols-1 md:grid-cols-1 gap-6">
+            <div class="bg-gray-900/70 p-4 rounded-xl neon-border border-red-600/50">
+                <h3 class="text-xl font-semibold mb-3 text-white border-b border-gray-700/50 pb-2">Geliştiricilere Göre Oyun Sayısı</h3>
+                <div id="developerDistributionList" class="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
+                    <!-- Geliştirici verileri buraya JS ile eklenecek -->
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+    <!-- 2. Oyun Ekleme/Düzenleme Paneli (Add Game Panel) -->
+    <div id="addGamePanel" class="slide-panel p-6 shadow-2xl">
+        <div class="flex justify-between items-center mb-6 border-b border-red-500/50 pb-3">
+            <h3 id="panelTitle" class="text-2xl font-semibold text-red-400" style="text-shadow: 0 0 5px #ff0000;">Yeni Oyun Ekle</h3>
+            <button onclick="toggleAddPanel()" class="text-red-500 hover:text-white transition">
+                <!-- Close Icon (X) -->
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <form id="gameForm" class="space-y-4">
+            <!-- Gizli Alan: Düzenlenen oyunun index'ini tutar -->
+            <input type="hidden" id="gameIndex" value="-1"> 
+
+            <!-- Oyun Adı -->
+            <div>
+                <label for="gameName" class="block text-sm font-medium text-gray-300">Oyun Adı</label>
+                <input type="text" id="gameName" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500" placeholder="Örn: Elden Ring">
+            </div>
+
+            <!-- Developer (Geliştirici) -->
+            <div>
+                <label for="gameDeveloper" class="block text-sm font-medium text-gray-300">Geliştirici</label>
+                <input type="text" id="gameDeveloper" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500" placeholder="Örn: FromSoftware">
+            </div>
+
+            <!-- Puan (Score) & Yıl (Year) -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="gameScore" class="block text-sm font-medium text-gray-300">Puan (0.0 - 10.0)</label>
+                    <input type="number" id="gameScore" min="0.0" max="10.0" step="0.1" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500" value="8.0">
+                </div>
+                <div>
+                    <label for="gameYear" class="block text-sm font-medium text-gray-300">Çıkış Yılı</label>
+                    <input type="number" id="gameYear" min="1950" max="2024" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500" value="2024">
+                </div>
+            </div>
+
+            <!-- Tür (Genre) & Platform (Category) -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="gameGenre" class="block text-sm font-medium text-gray-300">Tür</label>
+                    <select id="gameGenre" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500">
+                        <option value="aksiyon">⚔️ Aksiyon</option>
+                        <option value="macera">🧭 Macera</option>
+                        <option value="rpg">🧑‍💻 RPG</option>
+                        <option value="fps">🔫 FPS</option>
+                        <option value="simulasyon">✈️ Simülasyon</option>
+                        <option value="strateji">♟️ Strateji</option>
+                        <option value="yarış">🏎️ Yarış</option>
+                        <option value="spor">⚽ Spor</option>
+                        <option value="korku">👻 Korku</option>
+                        <option value="bulmaca">🧩 Bulmaca</option>
+                        <option value="platform">🪜 Platform</option>
+                        <option value="diğer">🎲 Diğer</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="gameCategory" class="block text-sm font-medium text-gray-300">Platform</label>
+                    <select id="gameCategory" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500">
+                        <option value="bilgisayar">💻 Bilgisayar</option>
+                        <option value="konsol">🎮 Konsol</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Aşama (Status) -->
+            <div>
+                <label for="gameStatus" class="block text-sm font-medium text-gray-300">Aşama</label>
+                <select id="gameStatus" required class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500">
+                    <!-- Yeni Aşama Seçenekleri -->
+                    <option value="Satın Alınacak">Satın Alınacak</option>
+                    <option value="Mevcut Oyunlar">Mevcut Oyunlar</option>
+                    <option value="Bekleme Listesi">Bekleme Listesi</option>
+                    <option value="Yüklü Oyunlar">Yüklü Oyunlar</option>
+                    <option value="Aktif Oynanıyor">Aktif Oynanıyor</option>
+                    <option value="Bitirildi">Bitirildi</option>
+                </select>
+            </div>
+            
+            <!-- YENİ: Notlar/Yorum Alanı -->
+            <div>
+                <label for="gameNotes" class="block text-sm font-medium text-gray-300">Notlar / Yorumlar</label>
+                <textarea id="gameNotes" rows="2" class="w-full bg-gray-800/80 text-white p-2 rounded-lg border border-purple-500/50 focus:ring-1 focus:ring-blue-500" placeholder="Kısa bir kişisel not ekleyin..."></textarea>
+            </div>
+
+
+            <div class="flex justify-end space-x-3 pt-2">
+                <button type="button" onclick="toggleAddPanel()" class="px-4 py-2 text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition">İptal</button>
+                <button id="modalSubmitButton" type="submit" class="neon-button px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition">Oyunu Ekle</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- 3. AI ÖNERİLERİ PANELİ (Yeni Panel) -->
+    <div id="recommendationPanel" class="slide-panel p-6 shadow-2xl">
+        <div class="flex justify-between items-center mb-6 border-b border-red-500/50 pb-3">
+            <h3 class="text-2xl font-semibold text-red-400" style="text-shadow: 0 0 5px #ff0000;">🤖 AI Oyun Önerileri</h3>
+            <button onclick="toggleRecommendationPanel()" class="text-red-500 hover:text-white transition">
+                <!-- Close Icon (X) -->
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <p class="text-gray-300 mb-4 text-sm">Kütüphanenizdeki en yüksek puanlı türlere ve geliştiricilere göre kişiselleştirilmiş öneriler.</p>
+
+        <div class="space-y-3 max-h-[80vh] overflow-y-auto custom-scrollbar">
+            <div id="recommendationsList" class="space-y-3">
+                <p class="text-gray-500 text-center py-4">Öneriler yükleniyor...</p>
+            </div>
+            
+            <button onclick="updateRecommendations(true)" class="neon-button mt-4 w-full bg-red-700 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-semibold">
+                Yeni Öneriler Oluştur
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Onay Modalı (Silme İşlemi İçin) -->
+    <div id="confirmationModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900/95 p-6 rounded-xl w-full max-w-sm neon-border text-center">
+            <h3 class="text-xl font-semibold mb-4 text-red-400">Silme İşlemini Onayla</h3>
+            <p id="confirmMessage" class="text-gray-300 mb-6">Bu oyunu silmek istediğinizden emin misiniz?</p>
+            
+            <div class="flex justify-center space-x-4">
+                <button type="button" onclick="closeConfirmationModal()" class="px-4 py-2 text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition">İptal</button>
+                <button type="button" id="confirmDeleteButton" class="neon-button px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition">Sil</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Çıkış Onay Modalı -->
+    <div id="exitConfirmationModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900/95 p-6 rounded-xl w-full max-w-sm neon-border text-center">
+            <h3 class="text-xl font-semibold mb-4 text-red-400">Çıkış Yap</h3>
+            <p class="text-gray-300 mb-6">Uygulamadan çıkmak istediğinizden emin misiniz?</p>
+            <div class="flex justify-center space-x-4">
+                <button type="button" onclick="closeExitModal()" class="px-4 py-2 text-white bg-gray-700 rounded-lg hover:bg-gray-600 transition">İptal</button>
+                <button type="button" id="confirmExitButton" onclick="handleExit()" class="neon-button px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition">Çıkış Yap</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- YENİ: Hata/Bilgilendirme Mesaj Kutusu -->
+    <div id="toastMessage" class="fixed bottom-5 right-5 z-[60] p-3 rounded-lg text-white shadow-xl transition-opacity duration-300 opacity-0" style="min-width: 250px;">
+        <!-- Mesajlar buraya JS ile eklenecektir -->
+    </div>
+
+
+    <!-- JavaScript for Game Data, Filtering, Modals and Charts -->
+    <script>
+        // Global Değişkenler
+        let games = [
+            // Başlangıç Verileri (Geliştirici bilgisi dahil)
+            { name: "Cyberpunk 2077", score: 9.2, year: 2020, genre: "rpg", category: "bilgisayar", status: "Bitirildi", dateAdded: "2024-03-10", developer: "CD Projekt Red", notes: "Mükemmel hikaye ve atmosfer." },
+            { name: "Baldur's Gate 3", score: 9.8, year: 2023, genre: "rpg", category: "bilgisayar", status: "Aktif Oynanıyor", dateAdded: "2024-05-15", developer: "Larian Studios", notes: "D&D sistemine bayıldım!" },
+            { name: "God of War Ragnarök", score: 9.5, year: 2022, genre: "aksiyon", category: "konsol", status: "Bitirildi", dateAdded: "2024-01-20", developer: "Santa Monica Studio", notes: "Kratos'un hikayesi harika bitti." },
+            { name: "Horizon Forbidden West", score: 9.0, year: 2022, genre: "macera", category: "konsol", status: "Bekleme Listesi", dateAdded: "2024-06-01", developer: "Guerrilla Games", notes: "İlk oyunu bitirmeden başlamamalı." },
+            { name: "The Witcher 3: Wild Hunt", score: 9.9, year: 2015, genre: "rpg", category: "bilgisayar", status: "Bitirildi", dateAdded: "2023-12-05", developer: "CD Projekt Red", notes: "Tüm zamanların en iyisi." },
+            { name: "Doom Eternal", score: 8.8, year: 2020, genre: "fps", category: "bilgisayar", status: "Mevcut Oyunlar", dateAdded: "2024-07-25", developer: "id Software", notes: "Çok hızlı ve akıcı bir FPS." },
+            { name: "Elden Ring", score: 9.6, year: 2022, genre: "aksiyon", category: "konsol", status: "Aktif Oynanıyor", dateAdded: "2024-05-01", developer: "FromSoftware", notes: "Açık dünyası inanılmaz, zor ama keyifli." },
+            { name: "Red Dead Redemption 2", score: 9.7, year: 2018, genre: "macera", category: "konsol", status: "Bitirildi", dateAdded: "2024-02-14", developer: "Rockstar Games", notes: "Arthur Morgan efsanesi." },
+            { name: "Starfield", score: 7.5, year: 2023, genre: "rpg", category: "bilgisayar", status: "Yüklü Oyunlar", dateAdded: "2024-07-20", developer: "Bethesda Game Studios", notes: "Çok büyük ama biraz boş hissettiriyor." },
+            { name: "Forza Horizon 5", score: 9.0, year: 2021, genre: "yarış", category: "bilgisayar", status: "Mevcut Oyunlar", dateAdded: "2024-08-01", developer: "Playground Games", notes: "Grafikler harika." },
+            { name: "Hades", score: 9.3, year: 2020, genre: "aksiyon", category: "bilgisayar", status: "Bitirildi", dateAdded: "2024-04-04", developer: "Supergiant Games", notes: "Sürekli oynanabilirliği çok iyi." },
+            { name: "Resident Evil 4 Remake", score: 9.4, year: 2023, genre: "korku", category: "konsol", status: "Bitirildi", dateAdded: "2024-06-11", developer: "Capcom", notes: "Korku ve aksiyon dengesi müthiş." },
+            { name: "Final Fantasy XVI", score: 9.0, year: 2023, genre: "rpg", category: "konsol", status: "Satın Alınacak", dateAdded: "2024-08-05", developer: "Square Enix", notes: "Demo çok umut vericiydi." },
+            { name: "Sons of the Forest", score: 8.0, year: 2023, genre: "simulasyon", category: "bilgisayar", status: "Bekleme Listesi", dateAdded: "2024-07-07", developer: "Endnight Games", notes: "Co-op oynamak eğlenceli olur." },
+            { name: "FIFA 24", score: 7.0, year: 2023, genre: "spor", category: "bilgisayar", status: "Mevcut Oyunlar", dateAdded: "2024-06-20", developer: "EA Sports", notes: "Standart spor oyunu." },
+        ].sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded)); // En yeni eklenen üste gelecek
+
+        // Element Referansları
+        let gameListElement;
+        let gameListContent;
+        let toggleListButton;
+        let emptyMessage;
+        let gameForm;
+        let panelTitle;
+        let modalSubmitButton;
+        let dashboardPanel;
+        let addGamePanel;
+        let recommendationPanel; 
+        let statusDistributionList;
+        let genreDistributionList;
+        let developerDistributionList; 
+        let yearAverageScoreList; 
+        let recommendationsList;
+        
+        // Modal Elementleri
+        let confirmationModal;
+        let confirmMessage;
+        let confirmDeleteButton;
+        let exitConfirmationModal; 
+        let toastMessage; // YENİ: Toast mesajı
+
+        // Login elementleri için global değişkenler
+        let loginOverlay;
+        let mainAppContainer;
+        let loginButton;
+        let passwordInput;
+        let loginError;
+
+        // **********************************************
+        // GÖRÜNÜRLÜK VE İÇERİK İŞLEMLERİ
+        // **********************************************
+
+        // Oyuncular listesini HTML'e yansıtma
+        function renderGames(filteredGames) {
+            gameListElement.innerHTML = '';
+            
+            if (filteredGames.length === 0) {
+                emptyMessage.style.display = 'block';
+                return;
+            }
+            emptyMessage.style.display = 'none';
+
+            filteredGames.forEach((game, index) => {
+                const gameIndex = games.findIndex(g => g === game); // Orijinal index'i bul
+                const statusColor = getStatusColor(game.status);
+                const scoreColor = getScoreColor(game.score);
+                const genreEmoji = getGenreEmoji(game.genre);
+
+                const gameDiv = document.createElement('div');
+                // Grid sütun sayısı: lg:grid-cols-7
+                gameDiv.className = `grid grid-cols-6 lg:grid-cols-7 gap-4 items-center p-3 rounded-lg border-l-4 ${statusColor.borderColor} hover:bg-gray-800 transition text-sm relative group`; // group eklendi
+                
+                // YENİ: Notları göstermek için tooltip/popover div'i
+                const notesHtml = game.notes ? `
+                    <div class="absolute top-0 right-0 p-1 m-1 opacity-0 group-hover:opacity-100 transition duration-300">
+                        <svg class="w-4 h-4 text-gray-500 hover:text-red-400 cursor-pointer" onclick="showNotesModal(${gameIndex}, event)" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Notları Gör">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                ` : '';
+
+                gameDiv.innerHTML = `
+                    ${notesHtml}
+                    <div class="col-span-2 flex flex-col sm:flex-row sm:items-center">
+                        <span class="font-semibold text-white mr-3 truncate">${genreEmoji} ${game.name}</span>
+                        <span class="text-xs font-bold ${scoreColor.textColor} bg-gray-700 px-2 py-0.5 rounded-full mt-1 sm:mt-0">${game.score.toFixed(1)}</span>
+                    </div>
+                    <div class="hidden lg:block text-gray-400 truncate">${game.developer}</div> <!-- Geliştirici Alanı -->
+                    <div class="hidden sm:block text-gray-400">${game.year}</div>
+                    <div class="hidden sm:block text-gray-400">${getCategoryTurkish(game.category)}</div>
+                    <div class="text-xs font-medium text-center px-1 py-0.5 rounded-full ${statusColor.bgColor} ${statusColor.textColor}">${game.status}</div>
+                    <div class="col-span-1 flex space-x-1">
+                        <button onclick="openEditPanel(${gameIndex})" class="text-yellow-500 hover:text-yellow-400 p-1 rounded transition" title="Düzenle">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        </button>
+                        <button onclick="openConfirmationModal(${gameIndex}, '${game.name}')" class="text-red-500 hover:text-red-400 p-1 rounded transition" title="Sil">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                `;
+                gameListElement.appendChild(gameDiv);
+            });
+        }
+
+        // Oyunları filtreleme ve sıralama
+        function filterGames() {
+            const nameInput = document.getElementById('gameNameInput').value.toLowerCase();
+            const genreFilterValue = document.getElementById('genreFilter').value;
+            const platformFilterValue = document.getElementById('platformFilter').value;
+            const statusFilterValue = document.getElementById('statusFilter').value;
+            const sortBy = document.getElementById('sortGamesBy').value; // YENİ: Sıralama kriteri
+
+            let filtered = games.filter(game => {
+                const nameMatch = game.name.toLowerCase().includes(nameInput);
+                const genreMatch = genreFilterValue === 'all' || game.genre === genreFilterValue;
+                const platformMatch = platformFilterValue === 'all' || game.category === platformFilterValue;
+                const statusMatch = statusFilterValue === 'all' || game.status === statusFilterValue;
+                
+                return nameMatch && genreMatch && platformMatch && statusMatch;
+            });
+            
+            // YENİ: Sıralama Mantığı
+            switch(sortBy) {
+                case 'score_desc':
+                    filtered.sort((a, b) => b.score - a.score);
+                    break;
+                case 'date_desc':
+                    filtered.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+                    break;
+                case 'date_asc':
+                    filtered.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
+                    break;
+                case 'year_desc':
+                    filtered.sort((a, b) => b.year - a.year);
+                    break;
+                case 'year_asc':
+                    filtered.sort((a, b) => a.year - b.year);
+                    break;
+                default:
+                    filtered.sort((a, b) => b.score - a.score); // Varsayılan: Puan
+            }
+
+            renderGames(filtered);
+        }
+
+        // Açma/Kapatma işlevi (Accordion)
+        function toggleGameListContent() {
+            const isClosed = gameListContent.classList.toggle('closed');
+            toggleListButton.innerHTML = isClosed 
+                ? '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.564-3.792m3.791-3.791A9.976 9.976 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.05 10.05 0 01-1.285 3.754m-2.839-2.839l-4.22 4.22L9 15m3-3l3-3m-3 3l3-3"></path></svg>Listeyi Aç' 
+                : '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>Listeyi Gizle';
+        }
+
+        // Stil Yardımcı Fonksiyonları
+        function getStatusColor(status) {
+            switch (status) {
+                case 'Bitirildi': return { bgColor: 'bg-green-700/50', textColor: 'text-green-300', borderColor: 'border-green-500' };
+                case 'Aktif Oynanıyor': return { bgColor: 'bg-blue-700/50', textColor: 'text-blue-300', borderColor: 'border-blue-500' };
+                case 'Yüklü Oyunlar': return { bgColor: 'bg-indigo-700/50', textColor: 'text-indigo-300', borderColor: 'border-indigo-500' };
+                case 'Mevcut Oyunlar': return { bgColor: 'bg-yellow-700/50', textColor: 'text-yellow-300', borderColor: 'border-yellow-500' };
+                case 'Bekleme Listesi': return { bgColor: 'bg-purple-700/50', textColor: 'text-purple-300', borderColor: 'border-purple-500' };
+                case 'Satın Alınacak': return { bgColor: 'bg-red-700/50', textColor: 'text-red-300', borderColor: 'border-red-500' };
+                default: return { bgColor: 'bg-gray-700/50', textColor: 'text-gray-300', borderColor: 'border-gray-500' };
+            }
+        }
+        
+        function getScoreColor(score) {
+            if (score >= 9.5) return { textColor: 'text-red-400' };
+            if (score >= 9.0) return { textColor: 'text-yellow-400' };
+            if (score >= 8.0) return { textColor: 'text-green-400' };
+            return { textColor: 'text-blue-400' };
+        }
+
+        function getGenreEmoji(genre) {
+            const map = {
+                'aksiyon': '⚔️', 'macera': '🧭', 'rpg': '🧑‍💻', 'fps': '🔫', 'simulasyon': '✈️',
+                'strateji': '♟️', 'yarış': '🏎️', 'spor': '⚽', 'korku': '👻', 'bulmaca': '🧩',
+                'platform': '🪜', 'diğer': '🎲'
+            };
+            return map[genre] || '🎲';
+        }
+
+        function getCategoryTurkish(category) {
+            return category === 'bilgisayar' ? 'PC' : 'Konsol';
+        }
+
+
+        // **********************************************
+        // MODAL VE PANEL İŞLEMLERİ
+        // **********************************************
+
+        // Dashboard Panelini Aç/Kapat
+        function toggleDashboard() {
+            const isOpen = dashboardPanel.classList.toggle('open');
+            if (isOpen) {
+                updateStatistics(); // Panel açıldığında istatistikleri güncelle
+            }
+        }
+
+        // Oyun Ekleme/Düzenleme Panelini Aç/Kapat
+        function toggleAddPanel() {
+            addGamePanel.classList.toggle('open');
+        }
+
+        // YENİ: Öneri Panelini Aç/Kapat
+        function toggleRecommendationPanel() {
+            const isOpen = recommendationPanel.classList.toggle('open');
+            if (isOpen) {
+                updateRecommendations(); // Panel açıldığında önerileri güncelle/göster
+            }
+        }
+
+        // Yeni Oyun Ekleme Panelini Aç
+        function openAddPanel() {
+            panelTitle.textContent = "Yeni Oyun Ekle";
+            modalSubmitButton.textContent = "Oyunu Ekle";
+            gameForm.reset(); // Formu sıfırla
+            document.getElementById('gameIndex').value = -1; // Yeni ekleme modu
+            // YENİ: Notlar alanını sıfırla
+            document.getElementById('gameNotes').value = ''; 
+            toggleAddPanel();
+        }
+
+        // Oyun Düzenleme Panelini Aç
+        function openEditPanel(index) {
+            const game = games[index];
+            if (!game) return;
+
+            panelTitle.textContent = "Oyunu Düzenle";
+            modalSubmitButton.textContent = "Güncelle";
+            
+            // Form alanlarını doldur
+            document.getElementById('gameName').value = game.name;
+            document.getElementById('gameDeveloper').value = game.developer; 
+            document.getElementById('gameScore').value = game.score;
+            document.getElementById('gameYear').value = game.year;
+            document.getElementById('gameGenre').value = game.genre;
+            document.getElementById('gameCategory').value = game.category;
+            document.getElementById('gameStatus').value = game.status;
+            document.getElementById('gameNotes').value = game.notes || ''; // YENİ: Notları doldur
+            document.getElementById('gameIndex').value = index; // Düzenlenen index'i kaydet
+            
+            toggleAddPanel();
+        }
+        
+        // YENİ: Notlar Modalını Göster
+        function showNotesModal(index, event) {
+            event.stopPropagation(); // Butona tıklanma event'inin parent'a yayılmasını engelle
+
+            const game = games[index];
+            if (!game || !game.notes) return;
+
+            // Mevcut Onay Modalı yapısını Notlar için kullan
+            confirmationModal.classList.remove('hidden');
+            document.querySelector('#confirmationModal h3').textContent = `${game.name} - Kişisel Notlar`;
+            document.getElementById('confirmMessage').textContent = game.notes;
+            
+            // Sadece kapatma butonu kalsın
+            document.getElementById('confirmDeleteButton').classList.add('hidden');
+            document.querySelector('#confirmationModal button[onclick="closeConfirmationModal()"]').textContent = 'Kapat';
+            
+            // Kapatma işlevini sıfırla
+            document.querySelector('#confirmationModal button[onclick="closeConfirmationModal()"]').onclick = () => {
+                confirmationModal.classList.add('hidden');
+                // Modalı orijinal haline geri döndür
+                document.querySelector('#confirmationModal h3').textContent = 'Silme İşlemini Onayla';
+                document.getElementById('confirmDeleteButton').classList.remove('hidden');
+                document.querySelector('#confirmationModal button[onclick="closeConfirmationModal()"]').textContent = 'İptal';
+                document.querySelector('#confirmationModal button[onclick="closeConfirmationModal()"]').onclick = closeConfirmationModal;
+            };
+        }
+
+
+        // Onay Modalı Aç (Silme İşlemi İçin)
+        function openConfirmationModal(index, gameName) {
+            // Notlar modalı için yapılan değişiklikleri geri al
+            document.querySelector('#confirmationModal h3').textContent = 'Silme İşlemini Onayla';
+            document.getElementById('confirmDeleteButton').classList.remove('hidden');
+            document.querySelector('#confirmationModal button[onclick="closeConfirmationModal()"]').textContent = 'İptal';
+            document.querySelector('#confirmationModal button[onclick="closeConfirmationModal()"]').onclick = closeConfirmationModal;
+
+
+            confirmationModal.classList.remove('hidden');
+            confirmMessage.textContent = `${gameName} oyununu silmek istediğinizden emin misiniz?`;
+            confirmDeleteButton.onclick = () => deleteGame(index, gameName);
+        }
+
+        // Onay Modalı Kapat
+        function closeConfirmationModal() {
+            confirmationModal.classList.add('hidden');
+        }
+
+        // Çıkış Modalı Aç
+        function openExitModal() {
+            exitConfirmationModal.classList.remove('hidden');
+        }
+
+        // Çıkış Modalı Kapat
+        function closeExitModal() {
+            exitConfirmationModal.classList.add('hidden');
+        }
+
+        // Çıkış İşlemi
+        function handleExit() {
+            console.log("Çıkış işlemi onaylandı.");
+            closeExitModal();
+            
+            // Ana uygulamayı gizle
+            mainAppContainer.classList.add('hidden');
+            
+            // Login ekranını göster
+            loginOverlay.classList.remove('hidden');
+            
+            // Şifre alanını temizle
+            if(passwordInput) passwordInput.value = '';
+            
+            // Başlığı orijinal haline getir
+            const h1 = document.querySelector('#mainAppContainer h1');
+            if(h1) h1.textContent = "Oyun Kütüphanesi";
+        }
+        
+        // YENİ: Toast Mesajını Göster
+        let toastTimeout;
+        function showToast(message, type = 'success') {
+            clearTimeout(toastTimeout);
+            
+            let bgColor = '';
+            switch(type) {
+                case 'success': bgColor = 'bg-green-600'; break;
+                case 'error': bgColor = 'bg-red-600'; break;
+                case 'info': bgColor = 'bg-blue-600'; break;
+                default: bgColor = 'bg-gray-700';
+            }
+
+            toastMessage.className = `fixed bottom-5 right-5 z-[60] p-3 rounded-lg text-white shadow-xl transition-opacity duration-300 ${bgColor} opacity-100`;
+            toastMessage.textContent = message;
+
+            toastTimeout = setTimeout(() => {
+                toastMessage.classList.add('opacity-0');
+            }, 3000); // 3 saniye sonra gizle
+        }
+
+
+        // **********************************************
+        // CRUD İŞLEMLERİ VE İSTATİSTİK GÜNCELLEME
+        // **********************************************
+
+        // Silme İşlemi
+        function deleteGame(index, gameName) {
+            games.splice(index, 1); // Oyunu listeden sil
+            closeConfirmationModal(); // Modalı kapat
+            filterGames(); 
+            updateStatisticsIfOpen();
+            updateRecommendations(false); 
+            showToast(`${gameName} kütüphaneden silindi.`, 'info');
+
+            console.log("Oyun başarıyla silindi. Yeni liste boyutu:", games.length);
+        }
+        
+        // Öneriden Hızlı Oyun Ekleme İşlemi 
+        function addGameFromRecommendation(encodedGameData) {
+            // 1. Veriyi Decode Et ve Parse Et
+            let gameData;
+            try {
+                const decodedString = decodeURIComponent(encodedGameData);
+                gameData = JSON.parse(decodedString);
+            } catch (e) {
+                console.error("Öneri verisi çözümlenirken hata oluştu:", e);
+                return; // Hata durumunda işlemi durdur
+            }
+
+            // Kontrol: Oyun zaten listede mi?
+            const isAlreadyAdded = games.some(game => game.name.toLowerCase() === gameData.name.toLowerCase());
+            
+            if (isAlreadyAdded) {
+                showToast(`${gameData.name} zaten kütüphanenizde!`, 'error');
+                return; 
+            }
+
+            const newGame = {
+                name: gameData.name,
+                developer: gameData.developer || 'Bilinmiyor', 
+                score: gameData.score || 8.0, 
+                year: gameData.year || new Date().getFullYear(), 
+                genre: gameData.genre || 'diğer', 
+                category: gameData.category || 'bilgisayar', 
+                status: 'Satın Alınacak', 
+                dateAdded: new Date().toISOString().slice(0, 10),
+                notes: `AI tarafından önerildi: ${gameData.reason}` // Not ekle
+            };
+
+            games.unshift(newGame); 
+            showToast(`${newGame.name} (Satın Alınacak) listeye eklendi.`, 'success');
+            
+            // UI güncellemeleri
+            filterGames(); 
+            updateStatisticsIfOpen();
+            updateRecommendations(false); 
+        }
+
+
+        // Form submit işlemi (Hem Ekleme hem Düzenleme)
+        function handleGameFormSubmit(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('gameName').value;
+            const developer = document.getElementById('gameDeveloper').value; 
+            const score = parseFloat(document.getElementById('gameScore').value);
+            const year = parseInt(document.getElementById('gameYear').value);
+            const genre = document.getElementById('gameGenre').value;
+            const category = document.getElementById('gameCategory').value;
+            const status = document.getElementById('gameStatus').value;
+            const notes = document.getElementById('gameNotes').value.trim(); // YENİ: Notları al
+            const index = parseInt(document.getElementById('gameIndex').value);
+
+            const updatedGame = {
+                name,
+                developer, 
+                score,
+                year,
+                genre,
+                category,
+                status,
+                notes, // YENİ: Notları kaydet
+            };
+
+            if (index === -1) {
+                // Ekleme işlemi
+                updatedGame.dateAdded = new Date().toISOString().slice(0, 10); 
+                games.unshift(updatedGame); 
+                showToast(`${name} kütüphaneye eklendi.`, 'success');
+                console.log(`Yeni oyun eklendi: ${name}`);
+            } else {
+                // Düzenleme işlemi
+                updatedGame.dateAdded = games[index].dateAdded; 
+                games[index] = updatedGame;
+                showToast(`${name} başarıyla güncellendi.`, 'info');
+                console.log(`Oyun güncellendi: ${name} (Index: ${index})`);
+            }
+
+            toggleAddPanel(); 
+            filterGames(); 
+            updateStatisticsIfOpen();
+            updateRecommendations(false); 
+        }
+
+        // İstatistik Panelini Güncelle (Sadece açıksa)
+        function updateStatisticsIfOpen() {
+            if (dashboardPanel.classList.contains('open')) {
+                updateStatistics();
+            }
+        }
+
+        // İstatistikleri Hesapla ve Güncelle
+        function updateStatistics() {
+            const finishedGames = games.filter(g => g.status === 'Bitirildi');
+            const totalGames = games.length;
+
+            const totalScore = games.reduce((sum, g) => sum + g.score, 0);
+            const avgScore = totalGames > 0 ? totalScore / totalGames : 0;
+
+            const finishedScoreSum = finishedGames.reduce((sum, g) => sum + g.score, 0);
+            const avgFinishedScore = finishedGames.length > 0 ? finishedScoreSum / finishedGames.length : 0;
+            
+            // Yıllara göre ortalama puanı hesapla ve en yüksek puanlı yılı bul
+            const yearScores = games.reduce((acc, game) => {
+                const year = game.year.toString();
+                if (!acc[year]) {
+                    acc[year] = { sum: 0, count: 0 };
+                }
+                acc[year].sum += game.score;
+                acc[year].count++;
+                return acc;
+            }, {});
+
+            let bestYear = 'N/A';
+            let maxAvgScore = -1; 
+            Object.entries(yearScores).forEach(([year, data]) => {
+                const avg = data.sum / data.count;
+                if (avg > maxAvgScore) {
+                    maxAvgScore = avg;
+                    bestYear = year;
+                }
+            });
+
+            // KPI Güncellemeleri
+            document.getElementById('kpiTotalGames').textContent = totalGames;
+            document.getElementById('kpiFinishedGames').textContent = finishedGames.length;
+            document.getElementById('kpiAverageScore').textContent = avgScore.toFixed(2);
+            document.getElementById('kpiAvgFinishedScore').textContent = avgFinishedScore.toFixed(2);
+            document.getElementById('kpiBestYear').textContent = bestYear; 
+            
+            // Sayısal Listeler
+            renderStatusDistribution();
+            renderGenreDistribution();
+            renderYearAverageScoreList(yearScores); 
+            renderDeveloperDistribution(); 
+        }
+
+        // Aşama Dağılımı Listesini Oluştur
+        function renderStatusDistribution() {
+            const statusCounts = games.reduce((acc, game) => {
+                acc[game.status] = (acc[game.status] || 0) + 1;
+                return acc;
+            }, {});
+
+            statusDistributionList.innerHTML = Object.entries(statusCounts)
+                .sort(([, countA], [, countB]) => countB - countA)
+                .map(([status, count]) => {
+                    const color = getStatusColor(status);
+                    return `
+                        <div class="flex justify-between items-center text-gray-300">
+                            <span class="${color.textColor} font-medium">${status}</span>
+                            <span class="font-bold text-lg text-white">${count}</span>
+                        </div>
+                    `;
+                }).join('');
+        }
+
+        // Tür Dağılımı Listesini Oluştur
+        function renderGenreDistribution() {
+            const genreCounts = games.reduce((acc, game) => {
+                acc[game.genre] = (acc[game.genre] || 0) + 1;
+                return acc;
+            }, {});
+
+            genreDistributionList.innerHTML = Object.entries(genreCounts)
+                .sort(([, countA], [, countB]) => countB - countA)
+                .map(([genre, count]) => {
+                    const genreName = `${getGenreEmoji(genre)} ${genre.charAt(0).toUpperCase() + genre.slice(1)}`;
+                    return `
+                        <div class="flex justify-between items-center text-gray-300">
+                            <span class="font-medium text-red-300">${genreName}</span>
+                            <span class="font-bold text-lg text-white">${count}</span>
+                        </div>
+                    `;
+                }).join('');
+        }
+        
+        // Yıllara Göre Ortalama Puan Listesini Oluştur
+        function renderYearAverageScoreList(yearScores) {
+            const averageScores = Object.entries(yearScores).map(([year, data]) => ({
+                year: parseInt(year),
+                avgScore: data.sum / data.count,
+                count: data.count, // Oyun sayısını da ekledik
+            }));
+
+            // Ortalama puana göre büyükten küçüğe sırala
+            const sortedScores = averageScores.sort((a, b) => b.avgScore - a.avgScore);
+
+            const htmlContent = sortedScores.map(item => {
+                const scoreColor = getScoreColor(item.avgScore);
+                // Oyun sayısı bilgisini kullanarak doğru metni oluştur
+                const countText = `(${item.count} oyun)`;
+
+                return `
+                    <div class="flex justify-between items-center text-gray-300">
+                        <span class="font-medium text-red-300">${item.year}</span>
+                        <span class="font-bold text-lg ${scoreColor.textColor}">
+                            ${item.avgScore.toFixed(2)} 
+                            <span class="text-sm text-gray-500">${countText}</span>
+                        </span>
+                    </div>
+                `;
+            }).join('');
+
+            yearAverageScoreList.innerHTML = htmlContent;
+        }
+
+        // Geliştirici Dağılım Listesini Oluştur
+        function renderDeveloperDistribution() {
+            const developerCounts = games.reduce((acc, game) => {
+                // Geliştirici adı boşsa "Bilinmiyor" olarak grupla
+                const developer = game.developer && game.developer.trim() !== '' ? game.developer : 'Bilinmiyor';
+                acc[developer] = (acc[developer] || 0) + 1;
+                return acc;
+            }, {});
+
+            // Geliştiricileri sayıma göre sırala (en çok oyuna sahip olan en üstte)
+            const sortedDevelopers = Object.entries(developerCounts)
+                .sort(([, countA], [, countB]) => countB - countA);
+
+            // TÜM geliştiricileri listele
+            const htmlContent = sortedDevelopers.map(([developer, count]) => {
+                return `
+                    <div class="flex justify-between items-center text-gray-300">
+                        <span class="text-red-300 font-medium truncate">${developer}</span>
+                        <span class="font-bold text-lg text-white">${count}</span>
+                    </div>
+                `;
+            }).join('');
+
+            developerDistributionList.innerHTML = htmlContent;
+        }
+        
+        // **********************************************
+        // AI ÖNERİ SİSTEMİ (SİMÜLASYON)
+        // **********************************************
+        
+        const MOCK_RECOMMENDATIONS = [
+            // Öneriler, kütüphane analizi yapıldığında, oyunda olmayan ve puanı yüksek oyunları içerecek
+            { name: "Sekiro: Shadows Die Twice", developer: "FromSoftware", genre: "aksiyon", score: 9.0, category: "konsol", reason: "En sevdiğiniz geliştirici olan FromSoftware'den yüksek puanlı bir Aksiyon oyunu.", year: 2019 },
+            { name: "Disco Elysium", developer: "ZA/UM", genre: "rpg", score: 9.4, category: "bilgisayar", reason: "Rol Yapma (RPG) türündeki ortalamanız çok yüksek; bu, türün en iyi hikaye odaklı oyunlarından.", year: 2019 },
+            { name: "Control", developer: "Remedy Entertainment", genre: "macera", score: 8.7, category: "bilgisayar", reason: "Macera oyunlarına ilginiz var. Kontrol'ün benzersiz dünyası ilginizi çekebilir.", year: 2019 },
+            { name: "DOOM (2016)", developer: "id Software", genre: "fps", score: 8.9, category: "bilgisayar", reason: "Doom Eternal'ı sevdiğiniz için, aynı geliştiricinin bir önceki çılgın FPS oyununu denemelisiniz.", year: 2016 },
+            { name: "Final Fantasy VII Remake", developer: "Square Enix", genre: "rpg", score: 9.1, category: "konsol", reason: "Square Enix'in RPG türündeki diğer popüler yapımına göz atın.", year: 2020 },
+            { name: "Celeste", developer: "Maddy Makes Games", genre: "platform", score: 9.6, category: "bilgisayar", reason: "Mükemmel platform oyunlarına bir şans vermelisiniz.", year: 2018 },
+            { name: "Resident Evil Village", developer: "Capcom", genre: "korku", score: 8.5, category: "konsol", reason: "Capcom'un yüksek puanlı bir korku oyunu.", year: 2021 }
+        ];
+
+        // Kütüphane Analizi ve Öneri Oluşturma
+        function generateRecommendations() {
+            if (games.length === 0) {
+                return [{ name: "Kütüphane Boş", reason: "Öneri oluşturmak için önce birkaç oyun eklemelisiniz.", genre: "diğer", score: 0.0, developer: "AI", category: "bilgisayar", year: 2024 }];
+            }
+
+            // Kullanıcının sahip olduğu oyun adları
+            const ownedGameNames = new Set(games.map(g => g.name.toLowerCase()));
+            
+            // En çok sevilen geliştirici ve türü bul (Basitçe ortalama puana göre)
+            const genreScores = {};
+            const developerScores = {};
+
+            games.forEach(game => {
+                // Tür ortalaması
+                genreScores[game.genre] = genreScores[game.genre] || { sum: 0, count: 0 };
+                genreScores[game.genre].sum += game.score;
+                genreScores[game.genre].count++;
+
+                // Geliştirici ortalaması
+                developerScores[game.developer] = developerScores[game.developer] || { sum: 0, count: 0 };
+                developerScores[game.developer].sum += game.score;
+                developerScores[game.developer].count++;
+            });
+
+            // En iyi türü bul
+            let bestGenre = '';
+            let maxGenreAvg = 0;
+            Object.entries(genreScores).forEach(([genre, data]) => {
+                const avg = data.sum / data.count;
+                if (avg > maxGenreAvg) {
+                    maxGenreAvg = avg;
+                    bestGenre = genre;
+                }
+            });
+
+            // En iyi geliştiriciyi bul
+            let bestDeveloper = '';
+            let maxDevAvg = 0;
+            Object.entries(developerScores).forEach(([dev, data]) => {
+                const avg = data.sum / data.count;
+                // En az 2 oyunu olan geliştiricilere odaklan
+                if (data.count >= 2 && avg > maxDevAvg) {
+                    maxDevAvg = avg;
+                    bestDeveloper = dev;
+                }
+            });
+
+            console.log(`Analiz Sonucu: En İyi Tür: ${bestGenre} (${maxGenreAvg.toFixed(1)}), En İyi Geliştirici: ${bestDeveloper} (${maxDevAvg.toFixed(1)})`);
+
+            // Önerileri filtrele ve sırala
+            const filteredRecommendations = MOCK_RECOMMENDATIONS.filter(rec => 
+                !ownedGameNames.has(rec.name.toLowerCase())
+            ).sort((a, b) => {
+                let scoreA = 0;
+                let scoreB = 0;
+
+                // Tür eşleşmesi için puan
+                if (a.genre === bestGenre) scoreA += 5;
+                if (b.genre === bestGenre) scoreB += 5;
+                
+                // Geliştirici eşleşmesi için puan
+                if (a.developer === bestDeveloper) scoreA += 7;
+                if (b.developer === bestDeveloper) scoreB += 7;
+                
+                // Popülerlik (Skora dayalı)
+                scoreA += a.score;
+                scoreB += b.score;
+
+                return scoreB - scoreA;
+            });
+            
+            // İlk 5 öneriyi al (Daha çeşitli olsun)
+            return filteredRecommendations.slice(0, 5).length > 0 ? filteredRecommendations.slice(0, 5) : MOCK_RECOMMENDATIONS.slice(0, 5);
+        }
+
+        // Önerileri HTML'e yansıtma 
+        function renderRecommendations(recommendations) {
+            recommendationsList.innerHTML = recommendations.map(rec => {
+                const genreEmoji = getGenreEmoji(rec.genre);
+                const scoreColor = getScoreColor(rec.score);
+                
+                // Oyunu listeye eklemek için gerekli tüm veriyi JSON'a çevir ve URI encode et.
+                const encodedGameData = encodeURIComponent(JSON.stringify(rec));
+
+                return `
+                    <div class="p-3 bg-gray-800/80 rounded-lg border-l-4 border-red-600 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center">
+                        <div class="flex-grow min-w-0 mb-2 md:mb-0">
+                            <p class="text-lg font-semibold text-white truncate">
+                                ${genreEmoji} ${rec.name} 
+                                <span class="text-xs font-bold ${scoreColor.textColor} bg-red-900/50 px-2 py-0.5 rounded-full ml-1">${rec.score.toFixed(1)}</span>
+                            </p>
+                            <p class="text-sm text-gray-400 mt-0.5">
+                                Geliştirici: <span class="text-red-300">${rec.developer}</span> | Yıl: <span class="text-red-300">${rec.year}</span>
+                            </p>
+                            <p class="text-xs text-red-500 italic mt-1">${rec.reason}</p>
+                        </div>
+                        <button onclick="addGameFromRecommendation('${encodedGameData}')" class="neon-button text-xs px-3 py-1 bg-red-800 text-white rounded-lg hover:bg-red-700 transition flex-shrink-0">
+                            Listeye Ekle
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Önerileri Güncelleme Başlatıcısı
+        function updateRecommendations(forceRefresh = false) {
+             if (forceRefresh) {
+                // Yenileme butonuna basıldığında loading mesajı göster
+                 recommendationsList.innerHTML = '<p class="text-red-400 text-center py-4 flex items-center justify-center space-x-2"><svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Yeni öneriler analiz ediliyor...</p>';
+                 
+                // Simülasyon olduğu için küçük bir gecikme ekleyelim
+                 setTimeout(() => {
+                    const recs = generateRecommendations();
+                    renderRecommendations(recs);
+                 }, 500); 
+             } else {
+                 // Otomatik güncelleme (panel açıldığında veya data değiştiğinde)
+                 const recs = generateRecommendations();
+                 renderRecommendations(recs);
+             }
+        }
+
+        // **********************************************
+        // GİRİŞ İŞLEMLERİ (BOOTSTRAP)
+        // **********************************************
+
+        // GİRİŞ İŞLEMİ FONKSİYONU
+        function handleLogin() {
+            const correctPassword = "1234"; // Demo şifre
+            const userInput = passwordInput.value;
+
+            if (userInput === correctPassword) {
+                // Başarılı giriş
+                loginOverlay.classList.add('hidden');
+                mainAppContainer.classList.remove('hidden');
+                loginError.textContent = '';
+                
+                // Ana uygulama UI'ını şimdi başlat
+                initializeAppUI();
+                showToast("Giriş başarılı! Hoş geldiniz.", 'success');
+
+            } else {
+                // Hatalı giriş
+                loginError.textContent = "Hatalı şifre. Tekrar deneyin.";
+                passwordInput.value = '';
+                passwordInput.focus();
+                showToast("Giriş başarısız!", 'error');
+            }
+        }
+
+
+        // Elementleri initialize eden ve event listener'ları ayarlayan fonksiyon
+        function initializeAppUI() {
+            // Global element referanslarını ayarla
+            gameListElement = document.getElementById('gameList');
+            gameListContent = document.getElementById('gameListContent');
+            toggleListButton = document.getElementById('toggleListButton');
+            emptyMessage = document.getElementById('emptyMessage');
+            gameForm = document.getElementById('gameForm'); 
+            panelTitle = document.getElementById('panelTitle'); 
+            modalSubmitButton = document.getElementById('modalSubmitButton');
+            dashboardPanel = document.getElementById('dashboardPanel');
+            addGamePanel = document.getElementById('addGamePanel'); 
+            recommendationPanel = document.getElementById('recommendationPanel'); 
+            statusDistributionList = document.getElementById('statusDistributionList');
+            genreDistributionList = document.getElementById('genreDistributionList');
+            developerDistributionList = document.getElementById('developerDistributionList'); 
+            yearAverageScoreList = document.getElementById('yearAverageScoreList'); 
+            recommendationsList = document.getElementById('recommendationsList'); 
+            
+            confirmationModal = document.getElementById('confirmationModal');
+            confirmMessage = document.getElementById('confirmMessage');
+            confirmDeleteButton = document.getElementById('confirmDeleteButton');
+            exitConfirmationModal = document.getElementById('exitConfirmationModal'); 
+            toastMessage = document.getElementById('toastMessage'); // YENİ TOAST REFERANSI
+
+            // Oyun ekleme/düzenleme formuna submit olayını bağla
+            gameForm.addEventListener('submit', handleGameFormSubmit);
+
+            // Başlangıçta tüm oyunları göster
+            filterGames(); 
+            
+            // AI Önerilerini yükle (Panel kapalı olsa da ilk yüklemeyi yapar)
+            updateRecommendations(); 
+        }
+
+        // Uygulama yüklendiğinde başlat
+        window.onload = function() {
+            // Login elementlerini bul
+            loginOverlay = document.getElementById('loginOverlay');
+            mainAppContainer = document.getElementById('mainAppContainer');
+            loginButton = document.getElementById('loginButton');
+            passwordInput = document.getElementById('passwordInput');
+            loginError = document.getElementById('loginError');
+
+            // Login eventlerini bağla
+            loginButton.addEventListener('click', handleLogin);
+            passwordInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    handleLogin();
+                }
+            });
+
+            // NOT: Ana uygulama UI'ı sadece başarılı girişten SONRA initializeAppUI() ile başlatılacaktır.
+        };
+    </script>
+
+</body>
+</html>
